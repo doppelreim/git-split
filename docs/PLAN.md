@@ -4,10 +4,27 @@
 
 We build GitSplit in incremental phases. Each phase produces a working (if limited) prototype that can be tested end-to-end.
 
-### Core Principle: Read vs Write Separation
+### Core Principles
 
-- **Reading data** (expenses, balances, settlement plan) happens through the **built static site**. No git connection needed. Anyone with the URL can view the current state.
-- **Writing data** (adding an expense) requires the git connection setup (proxy, PAT, repo URL). Only users who want to contribute data need this.
+- **Read vs Write Separation**: Reading data (expenses, balances, settlement plan) happens through the built static site - pure HTML+CSS, no JavaScript needed. Writing data (adding an expense) requires the git connection setup (proxy, PAT, repo URL).
+- **Fully Static Read-Only View**: The CI pipeline generates complete HTML with all data baked in. No client-side data fetching. The page works with JavaScript disabled.
+- **Fast CI Pipeline**: Zero dependency installation in CI. The build script uses only Node.js built-ins (`fs`, `path`), which are pre-installed on GitHub runners. Estimated pipeline time: ~15-20s.
+
+---
+
+## Technology Choice: Node.js with Zero Dependencies
+
+The build script (`scripts/build.js`) uses single-file Node.js with no npm dependencies:
+
+- **Pre-installed** on all GitHub Actions runners (Node 18+). No `npm install` step.
+- **Native JSON**: `JSON.parse` + `fs.readFileSync` - no libraries needed.
+- **Template literals**: The cleanest way to generate HTML. Multi-line strings with `${}` interpolation.
+- **One language**: Client-side code is also JS (isomorphic-git), so one language across the whole project.
+
+Alternatives considered:
+- Shell + jq: Zero install but HTML generation is fragile and unreadable.
+- Python: Zero install, decent, but adds a second language and HTML templating is clunkier.
+- Deno/Go: Require installation steps, adding seconds to every CI run.
 
 ---
 
@@ -23,7 +40,7 @@ A minimal HTTP proxy that forwards requests to GitHub's git HTTP endpoints and i
    - Adds `Access-Control-Allow-Origin: *` and related CORS headers to responses
    - Handles OPTIONS preflight requests
    - Passes through Authorization headers (for PAT auth)
-   - Minimal dependencies (just Node built-ins, or `http-proxy` if needed)
+   - Minimal dependencies (just Node built-ins)
 
 ### Deliverable
 - `proxy/server.js` - runnable with `node proxy/server.js`
@@ -33,8 +50,6 @@ A minimal HTTP proxy that forwards requests to GitHub's git HTTP endpoints and i
 ## Phase 2: Git Operations Library
 
 A thin wrapper around isomorphic-git that handles the clone-commit-push cycle from the browser.
-
-Use vanilla JavaScript unless TypeScript adds negligible build complexity.
 
 ### Tasks
 
@@ -48,6 +63,10 @@ Use vanilla JavaScript unless TypeScript adds negligible build complexity.
 2. **Configuration**
    - Repo URL, branch, proxy URL, PAT, and user's display name stored in localStorage
    - Git module reads config from localStorage
+
+3. **Client-side dependencies**
+   - isomorphic-git + lightning-fs downloaded from CDN and committed to the repo (e.g. `src/vendor/`)
+   - No npm, no CDN dependency at runtime, no client-side bundling toolchain needed
 
 ### Deliverable
 - `src/lib/git.js` - git operations module
@@ -70,9 +89,9 @@ Functions that write expense data using the git operations from Phase 2.
 
 ---
 
-## Phase 4: GitHub Actions Workflow
+## Phase 4: CI Pipeline + Static Site Generation
 
-The CI/CD pipeline that acts as the "backend." Moved up because it produces the data the frontend reads.
+The GitHub Actions workflow that acts as the "backend." Generates the complete static site.
 
 ### Tasks
 
@@ -80,79 +99,57 @@ The CI/CD pipeline that acts as the "backend." Moved up because it produces the 
    - Trigger on push to `main` branch
    - Only run if files in `data/expenses/` changed
 
-2. **Build step**
-   - Check out the repo
+2. **Build script** (`scripts/build.js`, zero npm deps, Node built-ins only)
    - Read all expense files from `data/expenses/`
-   - Derive `group.json` automatically from participant names found in expense files (no manual editing)
-   - Compute balances and settlement plan
-   - Write results to `data/computed.json` (balances, settlement, expense summary)
-   - Build the static site
-   - Deploy to `gh-pages` branch
+   - Derive participant list automatically from names found in expense files
+   - Compute net balances per person
+   - Compute settlement plan (greedy algorithm: match largest creditor with largest debtor to minimize transactions)
+   - Generate complete `dist/index.html` with inline CSS and all data rendered as HTML
+   - HTML-escape all user-provided strings (descriptions, names)
+   - Copy `src/app.js`, `src/manifest.json` into `dist/`
 
-3. **`data/computed.json` structure** (written by the pipeline, read by the static site)
-   ```json
-   {
-     "participants": ["Alice", "Bob", "Charlie"],
-     "currency": "EUR",
-     "expenses": [
-       {
-         "id": "...",
-         "description": "Dinner",
-         "amount": 84.50,
-         "paidBy": "Alice",
-         "splitBetween": ["Alice", "Bob", "Charlie"],
-         "date": "2026-03-06"
-       }
-     ],
-     "balances": {
-       "Alice": 56.33,
-       "Bob": -28.17,
-       "Charlie": -28.17
-     },
-     "settlements": [
-       { "from": "Bob", "to": "Alice", "amount": 28.17 },
-       { "from": "Charlie", "to": "Alice", "amount": 28.17 }
-     ]
-   }
-   ```
+3. **Deploy**
+   - Push `dist/` to `gh-pages` branch
+
+### HTML Template
+
+The HTML template lives inside `scripts/build.js` as a function returning a template literal. It is tightly coupled to the data shape; separating it adds maintenance burden with no benefit. If it grows beyond ~500 lines, extract to `scripts/template.js` (local `require()`, still zero npm deps).
 
 ### Deliverable
 - `.github/workflows/build.yml`
-- `scripts/compute.js` - the build script that reads expenses and produces `computed.json`
+- `scripts/build.js`
 
 ---
 
 ## Phase 5: Static Web App (Frontend)
 
-A minimal single-page app. The site reads `computed.json` to display data. Git operations are only needed for the "add expense" flow.
+### Read-Only View (pure HTML+CSS, generated by build.js)
 
-### Tasks
+- Balances per person with positive/negative styling
+- Settlement plan (who pays whom how much)
+- Expense list (using `<details>` elements for expand/collapse)
+- Mobile-responsive layout
+- Works with JavaScript disabled
 
-1. **Read-only view (default, no setup needed)**
-   - Fetches `computed.json` from the same origin (GitHub Pages)
-   - Displays list of expenses
-   - Displays net balances per person
-   - Displays settlement plan (who pays whom how much)
+### Write Flow (JavaScript, the only interactive part)
 
-2. **Write setup** (only when user wants to add an expense)
-   - "Add Expense" button opens a setup prompt if git connection is not yet configured
+1. **Setup prompt** (only when user first wants to add an expense)
    - Input fields: repo URL, PAT, proxy URL, user's display name
    - "Save & Connect" verifies the config works (attempts a clone)
    - Config stored in localStorage; setup is one-time per browser
 
-3. **Add Expense form**
-   - Fields: description, amount, paid by (text input or dropdown populated from `computed.json` participants), split between (checkboxes from participants, option to add new name)
-   - Single currency (configured once per group, stored in the repo or inferred)
+2. **Add Expense form**
+   - Fields: description, amount, paid by, split between (checkboxes, option to add new name)
+   - Single currency (configured once per group)
    - On submit: creates expense JSON file, commits, pushes
-   - Success message with note that it takes a minute or two for the site to update
+   - Success message noting ~1-2 min delay for site update
 
-4. **No manual sync needed for reading**
-   - Reading is just loading the page (which serves the latest built `computed.json`)
-   - A simple page refresh shows the latest data after Actions has rebuilt
+3. **No manual sync needed for reading**
+   - A page refresh shows the latest data after Actions has rebuilt
 
 ### Deliverable
-- `src/` directory with the complete static web app
-- Buildable into `dist/` for deployment to GitHub Pages
+- `src/app.js` - client-side JS for add-expense flow
+- `src/manifest.json` - PWA manifest
 
 ---
 
@@ -184,49 +181,38 @@ A minimal single-page app. The site reads `computed.json` to display data. Git o
 - **Android companion app** - acts as a CORS proxy on the device
 - **Expense deletion/editing**
 - **Multi-currency support**
-- **Smarter settlement algorithm** (minimize number of transactions)
 
 ---
 
-## Tech Stack
-
-| Component          | Technology                          |
-|--------------------|-------------------------------------|
-| Frontend           | Vanilla JS (or Preact if warranted) |
-| Git operations     | isomorphic-git + lightning-fs       |
-| CORS proxy (dev)   | Node.js                            |
-| CI/CD              | GitHub Actions                     |
-| Hosting            | GitHub Pages                       |
-| Build tool         | Vite (if needed) or plain HTML/JS  |
-
-The choice of vanilla JS vs Preact, and whether we need Vite, will be decided when starting Phase 5. For the prototype, simplicity wins.
-
----
-
-## File Structure (Projected)
+## File Structure
 
 ```
-crud-aa-cicd/
+git-split/
   proxy/
-    server.js                # Local CORS proxy
+    server.js                 # Local CORS proxy
   scripts/
-    compute.js               # Build script: reads expenses, writes computed.json
+    build.js                  # CI build: reads expenses, outputs dist/ (zero deps)
   src/
     lib/
-      git.js                 # isomorphic-git wrapper
-      expenses.js            # Expense write operations
-    app.js                   # Main app entry point
-    index.html               # Entry HTML
+      git.js                  # isomorphic-git wrapper
+      expenses.js             # Expense write operations
+    vendor/
+      isomorphic-git.js       # Downloaded from CDN, committed to repo
+      lightning-fs.js         # Downloaded from CDN, committed to repo
+    app.js                    # Client JS: add-expense form + git integration
+    manifest.json             # PWA manifest
   data/
-    expenses/                # One JSON file per expense (committed by users)
-    computed.json            # Generated by CI pipeline (balances, settlements)
+    expenses/                 # One JSON file per expense (committed by users)
+  dist/                       # Generated output (deployed to gh-pages)
+    index.html                # Complete static page, all data baked in
+    app.js                    # Copied from src/
+    manifest.json             # Copied from src/
   .github/
     workflows/
-      build.yml              # GitHub Actions workflow
+      build.yml
   docs/
     PROJECT.md
     PLAN.md
-  package.json
 ```
 
 ---
@@ -235,8 +221,8 @@ crud-aa-cicd/
 
 **Phase 1 + 2** together (proxy + git library) - first milestone: push a commit from the browser.
 Then **Phase 3** (expense data layer) - push a properly formatted expense file.
-Then **Phase 4** (GitHub Actions) - expenses get processed into `computed.json`.
-Then **Phase 5** (frontend) - the full UI reading computed data and writing expenses.
+Then **Phase 4** (CI pipeline + static generation) - expenses get processed into a complete HTML page.
+Then **Phase 5** (frontend) - the full UI with add-expense form.
 Phase 6 ongoing throughout.
 
 ---
@@ -246,6 +232,9 @@ Phase 6 ongoing throughout.
 - Single currency only for the prototype.
 - No expense deletion or editing in the prototype.
 - No manual group management - participants are derived from expense data by the pipeline.
-- No client-side balance calculation - all computation happens in the pipeline, results served via `computed.json`.
-- Git connection (proxy + PAT) is only needed for writing. Reading is just loading the static site.
-- Vanilla JS unless TypeScript/framework complexity is negligible.
+- No client-side data fetching - all data is baked into the HTML at build time.
+- No `computed.json` - the build script generates `index.html` directly.
+- Git connection (proxy + PAT) is only needed for writing. Reading is just loading the static page.
+- Node.js with zero npm dependencies for the build script (fastest CI pipeline).
+- isomorphic-git + lightning-fs vendored in the repo (downloaded from CDN once, committed). No runtime CDN dependency, no npm.
+- HTML template lives inside the build script (tightly coupled to data shape).
