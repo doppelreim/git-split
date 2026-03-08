@@ -74,6 +74,7 @@ docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t git-split:devc
 Run the dev-container:
 ```bash
 docker run --rm -it \
+  --publish 9999:9999 \
   --volume "../claude/state:/home/developer/.claude" \
   --volume "../claude/claude.json:/home/developer/.claude.json" \
   --volume "../claude/bin/claude:/home/developer/.local/bin/claude:ro" \
