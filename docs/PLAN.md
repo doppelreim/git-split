@@ -227,6 +227,26 @@ Phase 6 ongoing throughout.
 
 ---
 
+## Implementation Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: CORS Proxy | **Done** | `proxy/server.js` |
+| Phase 2: Git Operations | **Done** (code) | `src/lib/git.js` — vendor libs (`src/vendor/`) need manual download |
+| Phase 3: Data Layer | **Done** | `src/lib/expenses.js` |
+| Phase 4: CI Pipeline | **Done** | `scripts/build.js` + `.github/workflows/build.yml` |
+| Phase 5: Frontend | **Done** (code) | `src/app.js` + `src/manifest.json` |
+| Phase 6: Testing & Polish | **Not started** | Needs end-to-end testing with a real repo |
+
+### What's left before first end-to-end test
+
+1. Download vendor libraries into `src/vendor/` (isomorphic-git + lightning-fs browser bundles)
+2. Install Node.js in the dev-container (needed to run `proxy/server.js` and `scripts/build.js`)
+3. Create a test GitHub repo, enable Pages + Actions, generate a PAT
+4. Run the full cycle: proxy → open page → add expense → verify CI builds → verify Pages updates
+
+---
+
 ## Decisions Made
 
 - Single currency only for the prototype.

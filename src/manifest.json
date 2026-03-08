@@ -1,0 +1,9 @@
+{
+  "name": "GitSplit",
+  "short_name": "GitSplit",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#2563eb",
+  "description": "Expense sharing, powered by git"
+}
