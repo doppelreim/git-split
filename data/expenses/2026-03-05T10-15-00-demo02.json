@@ -1,0 +1,11 @@
+{
+  "id": "2026-03-05T10-15-00-demo02",
+  "description": "Groceries for weekend trip",
+  "amount": 52.30,
+  "currency": "EUR",
+  "paidBy": "Bob",
+  "splitBetween": ["Alice", "Bob"],
+  "date": "2026-03-05",
+  "createdBy": "Bob",
+  "createdAt": "2026-03-05T10:15:00Z"
+}
