@@ -79,5 +79,5 @@ docker run --rm -it \
   --volume "../claude/bin/claude:/home/developer/.local/bin/claude:ro" \
   --volume ".:/home/developer/git-split" \
   --workdir "/home/developer/git-split" \
-  claude-devcontainer claude
+  git-split:devcontainer claude
 ```

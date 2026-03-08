@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     ripgrep \
+    nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
