@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  // --- DOM helpers ---
+  // --- DOM helpers 11 ---
 
   function el(tag, attrs, ...children) {
     const elem = document.createElement(tag);
