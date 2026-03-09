@@ -1,0 +1,16 @@
+{
+  "id": "2026-03-09T19-48-45-bwiyzm",
+  "description": "Final countdown",
+  "amount": 13.17,
+  "currency": "EUR",
+  "paidBy": "Eve",
+  "splitBetween": [
+    "Alice",
+    "Bob",
+    "Charlie",
+    "Eve"
+  ],
+  "date": "2026-03-09",
+  "createdBy": "Eve",
+  "createdAt": "2026-03-09T19:48:45.597Z"
+}
