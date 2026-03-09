@@ -12,6 +12,21 @@ const ROOT = path.resolve(__dirname, '..');
 const EXPENSES_DIR = path.join(ROOT, 'data', 'expenses');
 const DIST_DIR = path.join(ROOT, 'dist');
 
+/** Recursively copy a directory */
+function copyDirSync(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src)) {
+    const srcPath = path.join(src, entry);
+    const destPath = path.join(dest, entry);
+    if (fs.statSync(srcPath).isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 // --- Data loading ---
 
 function loadExpenses() {
@@ -252,7 +267,7 @@ function generateHtml(expenses, balances, settlements) {
     }
     #add-expense-btn:hover { background: #1d4ed8; }
 
-    /* Form and modal styles are in app.js */
+    /* Modal and form styles are injected by app.js */
   </style>
 </head>
 <body>
@@ -278,7 +293,9 @@ function generateHtml(expenses, balances, settlements) {
     ${expensesHtml}
   </section>
 
-  <script src="app.js" defer></script>
+  <script src="vendor/isomorphic-git.js"></script>
+  <script src="vendor/lightning-fs.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>`;
 }
@@ -308,6 +325,10 @@ function main() {
       fs.copyFileSync(src, path.join(DIST_DIR, file));
     }
   }
+
+  // Copy lib/ and vendor/ directories
+  copyDirSync(path.join(ROOT, 'src', 'lib'), path.join(DIST_DIR, 'lib'));
+  copyDirSync(path.join(ROOT, 'src', 'vendor'), path.join(DIST_DIR, 'vendor'));
 
   console.log(`Built ${expenses.length} expenses → dist/index.html`);
   console.log(`Participants: ${Object.keys(balances).sort().join(', ') || '(none)'}`);
